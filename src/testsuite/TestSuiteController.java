@@ -4,16 +4,16 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.scene.control.Button;
-import javafx.scene.control.ListView;
-import javafx.scene.control.SelectionMode;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.ResourceBundle;
 
 /**
@@ -41,6 +41,8 @@ public class TestSuiteController implements Initializable {
 
     private final Model model;
 
+    private final HashMap<String, Boolean> cellMap = new HashMap<>();
+
     public TestSuiteController() {
         this.model = new Model();
     }
@@ -53,6 +55,7 @@ public class TestSuiteController implements Initializable {
 
         availableTests.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         executedTests.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        executedTests.setCellFactory(param -> new ColorListCell());
 
         setupModel();
         setupDragAndDrop();
@@ -73,11 +76,19 @@ public class TestSuiteController implements Initializable {
                     } else {
                         System.out.println(s + " [FAIL]");
                     }
+                    cellMap.put(s, exitCode == 0);
+                    updateExecutedTests();
                 }
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
+    }
+
+    private void updateExecutedTests() {
+        ObservableList<String> items = executedTests.getItems();
+        executedTests.setItems(null);
+        executedTests.setItems(items);
     }
 
     private void setupModel() {
@@ -159,11 +170,10 @@ public class TestSuiteController implements Initializable {
             event.consume();
         });
         executedTests.setOnDragDropped(event -> {
-            ObservableList<Integer> selectedIndices = availableTests.getSelectionModel().getSelectedIndices();
-            for (Integer i : selectedIndices) {
-                String remove = model.getAvailableTests().remove(i.intValue());
-                model.getExecutedTests().add(remove);
-            }
+            /* copy selection first because listener mess up the update when working on the actual list */
+            List<String> tmpList = new ArrayList<>(availableTests.getSelectionModel().getSelectedItems());
+            model.getAvailableTests().removeAll(tmpList);
+            model.getExecutedTests().addAll(tmpList);
         });
         executedTests.setOnDragDetected(event -> {
             Dragboard dragboard = executedTests.startDragAndDrop(TransferMode.MOVE);
@@ -180,11 +190,40 @@ public class TestSuiteController implements Initializable {
             event.consume();
         });
         availableTests.setOnDragDropped(event -> {
-            ObservableList<Integer> selectedIndices = executedTests.getSelectionModel().getSelectedIndices();
-            for (Integer i : selectedIndices) {
-                String remove = model.getExecutedTests().remove(i.intValue());
-                model.getAvailableTests().add(remove);
-            }
+            List<String> tmpList = new ArrayList<>(executedTests.getSelectionModel().getSelectedItems());
+            model.getExecutedTests().removeAll(tmpList);
+            model.getAvailableTests().addAll(tmpList);
+            tmpList.forEach(cellMap::remove);
         });
+    }
+
+    class ColorListCell extends ListCell<String> {
+        public void colorGreen() {
+            setStyle(GREEN);
+        }
+        public void colorRed() {
+            setStyle(RED);
+        }
+        public void colorWhite() {
+            setStyle("");
+        }
+
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty) {
+                setText(null);
+                setGraphic(null);
+                setStyle("");
+            } else {
+                setText(item);
+                if (cellMap.get(item) == null)
+                    colorWhite();
+                else if (cellMap.get(item))
+                    colorGreen();
+                else
+                    colorRed();
+            }
+        }
     }
 }
